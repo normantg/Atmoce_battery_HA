@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="custom_components/atmoce/icon.png" alt="Atmoce Battery" width="300">
+</p>
+
 # Atmoce Battery — Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
