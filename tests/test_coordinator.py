@@ -65,28 +65,30 @@ class TestComputedPvSelfConsumption:
     """Tests for the pv_self_consumption_rate derived sensor."""
 
     def test_full_self_consumption(self, coordinator):
-        # All PV consumed locally, nothing exported
+        # All PV consumed locally, importing from grid (no export)
+        # grid_power positive = importing, so exported = max(0, -positive) = 0
         data = {
             "battery_soc": 50, "battery_power": -1000,
-            "pv_power": 2000, "grid_power": -500,  # importing → no export
+            "pv_power": 2000, "grid_power": 500,
         }
         result = coordinator._compute_derived(data)
         assert result["pv_self_consumption_rate"] == 100.0
 
     def test_partial_export(self, coordinator):
         # 1000 W PV, exporting 400 W → 60% self-consumed
+        # grid_power negative = exporting to grid
         data = {
             "battery_soc": 50, "battery_power": 0,
-            "pv_power": 1000, "grid_power": 400,  # positive grid = export
+            "pv_power": 1000, "grid_power": -400,
         }
         result = coordinator._compute_derived(data)
         assert result["pv_self_consumption_rate"] == pytest.approx(60.0, abs=0.1)
 
     def test_full_export(self, coordinator):
-        # All PV exported
+        # All PV exported to grid (grid_power negative = exporting)
         data = {
             "battery_soc": 50, "battery_power": 0,
-            "pv_power": 1000, "grid_power": 1000,
+            "pv_power": 1000, "grid_power": -1000,
         }
         result = coordinator._compute_derived(data)
         assert result["pv_self_consumption_rate"] == pytest.approx(0.0, abs=0.1)
