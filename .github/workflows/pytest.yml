@@ -13,8 +13,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: |
-          pip install pytest pytest-asyncio pytest-homeassistant-custom-component
+        run: pip install pytest pytest-asyncio pytest-homeassistant-custom-component pymodbus
 
       - name: Run tests
         run: pytest tests/ -v
