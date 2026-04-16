@@ -1,8 +1,11 @@
 """Diagnostics support for Atmoce Battery."""
 from __future__ import annotations
+
 from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+
 from .const import CONF_CLOUD_APP_KEY, CONF_CLOUD_APP_SECRET, DOMAIN
 from .coordinator import AtmoceCoordinator
 

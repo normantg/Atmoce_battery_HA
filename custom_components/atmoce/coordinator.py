@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -40,7 +41,7 @@ _CONSUMPTION_WINDOW = 720
 class AtmoceCoordinator(DataUpdateCoordinator):
     """Manages polling, fallback logic, and computed sensors."""
 
-    def __init__(self, hass: HomeAssistant, config_entry) -> None:
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         super().__init__(
             hass,
             _LOGGER,

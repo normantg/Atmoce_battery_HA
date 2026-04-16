@@ -8,9 +8,9 @@ import voluptuous as vol
 from pymodbus.exceptions import ModbusException
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     BATTERY_MODELS,
@@ -33,20 +33,23 @@ from .modbus_client import AtmoceModbusClient
 _LOGGER = logging.getLogger(__name__)
 
 # ── Step 1: gateway connection ───────────────────────────────────────────────
-STEP_GATEWAY_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.All(int, vol.Range(min=1, max=65535)),
-        vol.Optional("show_advanced", default=False): bool,
+def _gateway_schema(
+    host: str = "",
+    port: int = DEFAULT_PORT,
+    show_advanced: bool = False,
+    slave: int = DEFAULT_SLAVE,
+) -> vol.Schema:
+    """Build the gateway schema, optionally expanding the advanced slave field."""
+    fields: dict = {
+        vol.Required(CONF_HOST, default=host): str,
+        vol.Required(CONF_PORT, default=port): vol.All(int, vol.Range(min=1, max=65535)),
+        vol.Optional("show_advanced", default=show_advanced): bool,
     }
-)
-
-# ── Step 1b: advanced options ─────────────────────────────────────────────────
-STEP_ADVANCED_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_SLAVE, default=DEFAULT_SLAVE): vol.All(int, vol.Range(min=1, max=247)),
-    }
-)
+    if show_advanced:
+        fields[vol.Required(CONF_SLAVE, default=slave)] = vol.All(
+            int, vol.Range(min=1, max=247)
+        )
+    return vol.Schema(fields)
 
 # ── Step 2: battery model ────────────────────────────────────────────────────
 STEP_BATTERY_SCHEMA = vol.Schema(
@@ -96,16 +99,26 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ── Step 1: gateway ──────────────────────────────────────────────────────
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        show_advanced = False
 
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
             port = user_input[CONF_PORT]
-            show_advanced = user_input.pop("show_advanced", False)
+            show_advanced = user_input.get("show_advanced", False)
+            slave = user_input.get(CONF_SLAVE, DEFAULT_SLAVE)
 
-            # Try to connect using default slave; actual slave set in advanced step
-            slave = self._data.get(CONF_SLAVE, DEFAULT_SLAVE)
+            # If advanced was just toggled on, re-render the same form with slave field
+            if show_advanced and CONF_SLAVE not in user_input:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=_gateway_schema(
+                        host=host, port=port, show_advanced=True, slave=DEFAULT_SLAVE
+                    ),
+                    errors={},
+                )
+
             client = AtmoceModbusClient(host, port, slave)
             try:
                 await client.async_connect()
@@ -118,39 +131,22 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(sn or f"{host}:{port}")
                 self._abort_if_unique_id_configured()
-                self._data.update(user_input)
+                self._data[CONF_HOST] = host
+                self._data[CONF_PORT] = port
+                self._data[CONF_SLAVE] = slave
                 self._data["serial_number"] = sn
-                self._data.setdefault(CONF_SLAVE, DEFAULT_SLAVE)
-                if show_advanced:
-                    return await self.async_step_advanced()
                 return await self.async_step_battery()
 
         return self.async_show_form(
             step_id="user",
-            data_schema=STEP_GATEWAY_SCHEMA,
+            data_schema=_gateway_schema(show_advanced=show_advanced),
             errors=errors,
-            description_placeholders={
-                "default_port": str(DEFAULT_PORT),
-            },
-        )
-
-    # ── Step 1b: advanced options ─────────────────────────────────────────────
-    async def async_step_advanced(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        if user_input is not None:
-            self._data[CONF_SLAVE] = user_input[CONF_SLAVE]
-            return await self.async_step_battery()
-
-        return self.async_show_form(
-            step_id="advanced",
-            data_schema=STEP_ADVANCED_SCHEMA,
         )
 
     # ── Step 2: battery model ────────────────────────────────────────────────
     async def async_step_battery(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         if user_input is not None:
             self._data[CONF_BATTERY_MODEL] = user_input[CONF_BATTERY_MODEL]
             if user_input[CONF_BATTERY_MODEL] == "manual":
@@ -170,7 +166,7 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ── Step 2b: manual battery specs ────────────────────────────────────────
     async def async_step_manual_battery(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_cloud()
@@ -183,7 +179,7 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ── Step 3: cloud (optional) ─────────────────────────────────────────────
     async def async_step_cloud(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -210,18 +206,20 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ── Reauth (IP changed) ──────────────────────────────────────────────────
     async def async_step_reauth(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
             port = user_input.get(CONF_PORT, DEFAULT_PORT)
-            slave = user_input.get(CONF_SLAVE, DEFAULT_SLAVE)
+
+            entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+            slave = entry.data.get(CONF_SLAVE, DEFAULT_SLAVE)
 
             client = AtmoceModbusClient(host, port, slave)
             try:
@@ -231,10 +229,9 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
 
             if not errors:
-                entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data={**entry.data, CONF_HOST: host, CONF_PORT: port, CONF_SLAVE: slave},
+                    data={**entry.data, CONF_HOST: host, CONF_PORT: port},
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
@@ -245,7 +242,6 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST, default=self.context.get("host", "")): str,
                     vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-                    vol.Required(CONF_SLAVE, default=DEFAULT_SLAVE): int,
                 }
             ),
             errors=errors,
@@ -256,18 +252,15 @@ class AtmoceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> AtmoceOptionsFlow:
-        return AtmoceOptionsFlow(config_entry)
+        return AtmoceOptionsFlow()
 
 
 class AtmoceOptionsFlow(config_entries.OptionsFlow):
     """Handle options (accessible from the integration card after setup)."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -281,7 +274,7 @@ class AtmoceOptionsFlow(config_entries.OptionsFlow):
             if not errors:
                 return self.async_create_entry(title="", data=user_input)
 
-        current = self._entry.options or self._entry.data
+        current = self.config_entry.options or self.config_entry.data
 
         schema = vol.Schema(
             {

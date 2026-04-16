@@ -7,14 +7,11 @@
         "data": {
           "host": "IP address",
           "port": "Modbus TCP port",
-          "show_advanced": "Advanced settings"
-        }
-      },
-      "advanced": {
-        "title": "Advanced settings",
-        "description": "Only change the Modbus Slave ID if your gateway was configured with a non-default value. Leave it at 1 if unsure.",
-        "data": {
+          "show_advanced": "Advanced settings",
           "slave": "Modbus Slave ID (1–247)"
+        },
+        "data_description": {
+          "slave": "Only change this if your gateway was configured with a non-default Slave ID. Leave it at 1 if unsure."
         }
       },
       "battery": {
@@ -47,8 +44,7 @@
         "title": "Re-authenticate — gateway IP changed",
         "data": {
           "host": "New IP address",
-          "port": "Modbus TCP port",
-          "slave": "Modbus slave ID"
+          "port": "Modbus TCP port"
         }
       }
     },
