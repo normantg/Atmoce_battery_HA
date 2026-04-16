@@ -7,7 +7,6 @@
         "data": {
           "host": "Host",
           "port": "Puerto",
-          "show_advanced": "Ajustes avanzados",
           "slave": "Slave ID Modbus (1–247)"
         },
         "data_description": {
