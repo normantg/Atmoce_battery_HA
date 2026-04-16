@@ -7,6 +7,8 @@ from typing import Any
 import voluptuous as vol
 from pymodbus.exceptions import ModbusException
 
+
+from homeassistant.helpers import selector
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -45,8 +47,12 @@ def _gateway_schema(
             vol.Required(CONF_PORT, default=port): vol.All(
                 int, vol.Range(min=1, max=65535)
             ),
-            vol.Required(CONF_SLAVE, default=slave): vol.All(
-                int, vol.Range(min=1, max=247)
+            vol.Required(CONF_SLAVE, default=slave): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=247,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
             ),
         }
     )
